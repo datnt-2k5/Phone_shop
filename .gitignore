@@ -1,0 +1,54 @@
+
+# ======================================
+# PHONE SHOP v2.5 - GIT IGNORE
+# ======================================
+
+# 1. Moi truong Python
+.venv/
+venv/
+env/
+
+# 2. Mat khau va cau hinh rieng
+.env
+.env.*
+!.env.example
+
+# 3. Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# 4. Pytest va kiem tra code
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# 5. PyCharm va editor
+.idea/
+.vscode/
+
+# 6. Build va distribution
+build/
+dist/
+*.egg-info/
+
+# 7. Tep tam va log
+*.log
+*.tmp
+*.bak
+*.swp
+
+# 8. Database cuc bo
+*.sqlite
+*.sqlite3
+*.db
+
+# 9. Flet local cache
+.flet/
+
+# 10. Tep he dieu hanh
+.DS_Store
+Thumbs.db
