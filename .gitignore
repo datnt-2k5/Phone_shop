@@ -52,3 +52,6 @@ dist/
 # 10. Tep he dieu hanh
 .DS_Store
 Thumbs.db
+
+# US03 - Uploaded profile pictures
+/assets/avatars/
