@@ -1,8 +1,9 @@
 
-"""User Repository - truy vấn bảng users.
+"""User Repository: thao tác dữ liệu bảng users.
 
-US01 - Task 9: Đăng ký tài khoản.
-US02 - Task 14: Tải lại user bằng ID để kiểm tra session.
+US01: Đăng ký tài khoản.
+US02: Đăng nhập và kiểm tra session.
+US03: Đọc và cập nhật hồ sơ cá nhân.
 """
 
 from datetime import datetime
@@ -14,13 +15,13 @@ from repositories.base_repository import BaseRepository
 
 
 class UserRepository(BaseRepository):
-    """Các thao tác dữ liệu liên quan đến tài khoản."""
+    """Repository cho bảng users."""
 
     def get_by_email(
         self,
         email: str,
     ) -> dict[str, Any] | None:
-        """Tìm tài khoản theo email đã chuẩn hóa."""
+        """Lấy tài khoản theo email phục vụ đăng nhập."""
 
         row = self.session.execute(
             text("""
@@ -44,22 +45,37 @@ class UserRepository(BaseRepository):
     def get_by_id(
         self,
         user_id: int,
+        *,
+        for_update: bool = False,
     ) -> dict[str, Any] | None:
-        """Tải tài khoản hiện tại từ database bằng ID."""
+        """Lấy tài khoản và thông tin hồ sơ bằng ID.
+
+        for_update=True khóa hàng trong transaction,
+        sử dụng khi cập nhật hồ sơ.
+        """
+
+        sql = """
+            SELECT
+                id,
+                email,
+                full_name,
+                phone,
+                address,
+                role,
+                status,
+                created_at,
+                updated_at,
+                updated_by
+            FROM users
+            WHERE id = :user_id
+            LIMIT 1
+        """
+
+        if for_update:
+            sql += " FOR UPDATE"
 
         row = self.session.execute(
-            text("""
-                SELECT
-                    id,
-                    email,
-                    full_name,
-                    phone,
-                    role,
-                    status
-                FROM users
-                WHERE id = :user_id
-                LIMIT 1
-            """),
+            text(sql),
             {"user_id": user_id},
         ).mappings().first()
 
@@ -74,7 +90,7 @@ class UserRepository(BaseRepository):
         phone: str,
         now_utc: datetime,
     ) -> int:
-        """Tạo tài khoản CUSTOMER/ACTIVE và trả về ID mới."""
+        """Tạo tài khoản CUSTOMER/ACTIVE."""
 
         result = self.session.execute(
             text("""
@@ -120,3 +136,39 @@ class UserRepository(BaseRepository):
             )
 
         return int(result.lastrowid)
+
+    def update_own_profile(
+        self,
+        *,
+        user_id: int,
+        full_name: str,
+        phone: str,
+        address: str | None,
+        now_utc: datetime,
+    ) -> None:
+        """Chỉ cập nhật ba trường hồ sơ và thông tin audit.
+
+        user_id được cung cấp bởi ProfileService sau
+        khi xác minh server-side Session.
+        """
+
+        self.session.execute(
+            text("""
+                UPDATE users
+                SET
+                    full_name = :full_name,
+                    phone = :phone,
+                    address = :address,
+                    updated_at = :now_utc,
+                    updated_by = :user_id
+                WHERE id = :user_id
+                  AND status = 'ACTIVE'
+            """),
+            {
+                "user_id": user_id,
+                "full_name": full_name,
+                "phone": phone,
+                "address": address,
+                "now_utc": now_utc,
+            },
+        )
