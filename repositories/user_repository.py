@@ -1,8 +1,8 @@
 
-"""User Repository - thao tác với bảng users.
+"""User Repository - truy vấn bảng users.
 
-US01 - Task 9.
-Repository chỉ truy vấn dữ liệu, không tự commit.
+US01 - Task 9: Đăng ký tài khoản.
+US02 - Task 14: Tải lại user bằng ID để kiểm tra session.
 """
 
 from datetime import datetime
@@ -14,13 +14,13 @@ from repositories.base_repository import BaseRepository
 
 
 class UserRepository(BaseRepository):
-    """Repository quản lý dữ liệu tài khoản."""
+    """Các thao tác dữ liệu liên quan đến tài khoản."""
 
     def get_by_email(
         self,
         email: str,
     ) -> dict[str, Any] | None:
-        """Tìm tài khoản bằng email đã chuẩn hóa."""
+        """Tìm tài khoản theo email đã chuẩn hóa."""
 
         row = self.session.execute(
             text("""
@@ -41,6 +41,30 @@ class UserRepository(BaseRepository):
 
         return dict(row) if row is not None else None
 
+    def get_by_id(
+        self,
+        user_id: int,
+    ) -> dict[str, Any] | None:
+        """Tải tài khoản hiện tại từ database bằng ID."""
+
+        row = self.session.execute(
+            text("""
+                SELECT
+                    id,
+                    email,
+                    full_name,
+                    phone,
+                    role,
+                    status
+                FROM users
+                WHERE id = :user_id
+                LIMIT 1
+            """),
+            {"user_id": user_id},
+        ).mappings().first()
+
+        return dict(row) if row is not None else None
+
     def create_customer(
         self,
         *,
@@ -50,7 +74,7 @@ class UserRepository(BaseRepository):
         phone: str,
         now_utc: datetime,
     ) -> int:
-        """Tạo CUSTOMER/ACTIVE, trả về ID mới."""
+        """Tạo tài khoản CUSTOMER/ACTIVE và trả về ID mới."""
 
         result = self.session.execute(
             text("""

@@ -1,11 +1,12 @@
 
-"""Auth Service - đăng ký và đăng nhập tài khoản.
+"""Auth Service: đăng ký, đăng nhập, kiểm tra session, đăng xuất.
 
-US01 - Task 9, 10: Register.
-US02 - Task 13: Login với bcrypt và server-side session.
+US01 - Task 9-10: Register.
+US02 - Task 13: Login.
+US02 - Task 14: require_user và logout.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from typing import NoReturn
 
@@ -18,6 +19,7 @@ from models.app_error import AppError
 from repositories.user_repository import UserRepository
 from services.auth_session import (
     AUTH_SESSION_USER_ID_KEY,
+    SESSION_KEYS_TO_CLEAR,
     AuthSessionStore,
 )
 from services.base_service import BaseService
@@ -33,7 +35,7 @@ from utils.validators import (
 
 @dataclass(frozen=True, slots=True)
 class RegistrationResult:
-    """Kết quả an toàn sau khi đăng ký."""
+    """Kết quả an toàn sau đăng ký."""
 
     user_id: int
     email: str
@@ -45,7 +47,7 @@ class RegistrationResult:
 
 @dataclass(frozen=True, slots=True)
 class LoginResult:
-    """Thông tin tài khoản sau khi xác thực thành công."""
+    """Thông tin trả về sau đăng nhập thành công."""
 
     user_id: int
     email: str
@@ -53,8 +55,19 @@ class LoginResult:
     role: str
 
 
+@dataclass(frozen=True, slots=True)
+class AuthenticatedUser:
+    """Tài khoản đã được xác thực lại từ database."""
+
+    user_id: int
+    email: str
+    full_name: str
+    role: str
+    status: str
+
+
 def _invalid_credentials() -> NoReturn:
-    """Dùng cùng một lỗi cho email không tồn tại hoặc mật khẩu sai."""
+    """Không tiết lộ email hay mật khẩu nào bị sai."""
 
     raise AppError(
         "INVALID_CREDENTIALS",
@@ -62,8 +75,17 @@ def _invalid_credentials() -> NoReturn:
     )
 
 
+def _unauthorized() -> NoReturn:
+    """Người dùng chưa có phiên đăng nhập hợp lệ."""
+
+    raise AppError(
+        "UNAUTHORIZED",
+        "Vui lòng đăng nhập để tiếp tục.",
+    )
+
+
 class AuthService(BaseService):
-    """Service xử lý đăng ký và đăng nhập."""
+    """Nghiệp vụ xác thực tài khoản."""
 
     def __init__(
         self,
@@ -84,7 +106,6 @@ class AuthService(BaseService):
     ) -> RegistrationResult:
         """Đăng ký tài khoản CUSTOMER/ACTIVE."""
 
-        # Task 9-10: Validate dữ liệu đăng ký
         normalized_email = validate_email(email)
         normalized_name = validate_full_name(full_name)
         normalized_phone = validate_phone(phone)
@@ -96,7 +117,6 @@ class AuthService(BaseService):
             confirm_password,
         )
 
-        # Hash password bằng bcrypt
         password_hash = bcrypt.hashpw(
             validated_password.encode("utf-8"),
             bcrypt.gensalt(),
@@ -131,7 +151,6 @@ class AuthService(BaseService):
                 )
 
         except IntegrityError as exc:
-            # MariaDB UNIQUE(email): mã 1062 = trùng dữ liệu
             error_code = (
                 exc.orig.args[0]
                 if exc.orig.args
@@ -163,32 +182,19 @@ class AuthService(BaseService):
         password: str,
         session_store: AuthSessionStore,
     ) -> LoginResult:
-        """Đăng nhập và lưu user_id vào session phía server.
+        """Đăng nhập và lưu user_id vào server-side session."""
 
-        Trình tự:
-        1. Chuẩn hóa email.
-        2. Truy vấn tài khoản theo email.
-        3. Kiểm tra mật khẩu bằng bcrypt.
-        4. Kiểm tra trạng thái ACTIVE.
-        5. Lưu user_id vào server-side session.
-        """
-
-        # 1. Dữ liệu đầu vào phải là chuỗi
         if not isinstance(email, str):
             _invalid_credentials()
 
         if not isinstance(password, str):
             _invalid_credentials()
 
-        # 2. Email chuẩn hóa theo cùng quy tắc đăng ký
         try:
             normalized_email = validate_email(email)
         except AppError:
-            # Không phân biệt email sai định dạng với
-            # email chưa tồn tại khi trả lỗi đăng nhập.
             _invalid_credentials()
 
-        # 3. Giữ nguyên password; không strip, không lower.
         try:
             password_bytes = password.encode("utf-8")
         except UnicodeEncodeError:
@@ -197,16 +203,13 @@ class AuthService(BaseService):
         if not password_bytes or len(password_bytes) > 72:
             _invalid_credentials()
 
-        # 4. Đọc thông tin tài khoản từ MariaDB
         with self.session_factory() as session:
             repository = UserRepository(session)
             user = repository.get_by_email(normalized_email)
 
-        # 5. Email không tồn tại
         if user is None:
             _invalid_credentials()
 
-        # 6. So khớp mật khẩu với password_hash của DB
         stored_hash = user["password_hash"].encode("ascii")
 
         if not bcrypt.checkpw(
@@ -215,27 +218,106 @@ class AuthService(BaseService):
         ):
             _invalid_credentials()
 
-        # 7. Chỉ tài khoản ACTIVE mới được đăng nhập
         if user["status"] != "ACTIVE":
             raise AppError(
                 "ACCOUNT_LOCKED",
                 "Tài khoản đã bị khóa hoặc không còn hoạt động.",
             )
 
-        # 8. Chỉ lấy user_id đã xác thực từ database
         user_id = int(user["id"])
 
-        # Chỉ lưu danh tính sau khi mọi kiểm tra đều đạt.
-        # Không lưu password, hash, email hoặc role ở đây.
         session_store.set(
             AUTH_SESSION_USER_ID_KEY,
             user_id,
         )
 
-        # 9. Trả thông tin cần cho bước giao diện sau này
         return LoginResult(
             user_id=user_id,
             email=user["email"],
             full_name=user["full_name"],
             role=user["role"],
         )
+
+    def require_user(
+        self,
+        *,
+        session_store: AuthSessionStore,
+        allowed_roles: Collection[str] | None = None,
+    ) -> AuthenticatedUser:
+        """Kiểm tra phiên đăng nhập và trạng thái ACTIVE mới nhất.
+
+        Chỉ tin user_id từ session phía server.
+        Luôn tải lại status và role từ MariaDB.
+
+        allowed_roles phải do code Service phía server quy định,
+        không lấy trực tiếp từ lựa chọn của người dùng.
+        """
+
+        # 1. Lấy user_id đã xác thực trong server session.
+        raw_user_id = session_store.get(
+            AUTH_SESSION_USER_ID_KEY
+        )
+
+        # Chưa đăng nhập: từ chối, không xóa giỏ của khách.
+        if raw_user_id is None:
+            _unauthorized()
+
+        # 2. Kiểm tra ID, từ chối cả bool, float và string.
+        if (
+            type(raw_user_id) is not int
+            or raw_user_id <= 0
+        ):
+            self.logout(session_store=session_store)
+            _unauthorized()
+
+        # 3. Truy vấn lại tài khoản từ MariaDB.
+        with self.session_factory() as session:
+            repository = UserRepository(session)
+            user = repository.get_by_id(raw_user_id)
+
+        # 4. User đã bị xóa hoặc không tồn tại.
+        if user is None:
+            self.logout(session_store=session_store)
+            _unauthorized()
+
+        # 5. Tài khoản không còn ACTIVE.
+        if user["status"] != "ACTIVE":
+            self.logout(session_store=session_store)
+
+            raise AppError(
+                "ACCOUNT_LOCKED",
+                "Tài khoản đã bị khóa hoặc không còn hoạt động.",
+            )
+
+        # 6. Kiểm tra vai trò từ database, không từ UI.
+        if (
+            allowed_roles is not None
+            and user["role"] not in allowed_roles
+        ):
+            raise AppError(
+                "FORBIDDEN",
+                "Bạn không có quyền thực hiện thao tác này.",
+            )
+
+        # 7. Trả về danh tính và role được xác thực lại.
+        return AuthenticatedUser(
+            user_id=int(user["id"]),
+            email=user["email"],
+            full_name=user["full_name"],
+            role=user["role"],
+            status=user["status"],
+        )
+
+    @staticmethod
+    def logout(
+        *,
+        session_store: AuthSessionStore,
+    ) -> None:
+        """Xóa dữ liệu đăng nhập và dữ liệu tạm của người dùng.
+
+        Không xóa toàn bộ Session Store của Flet.
+        Chuyển hướng về trang công khai được UI xử lý ở Task 15.
+        """
+
+        for key in SESSION_KEYS_TO_CLEAR:
+            session_store.remove(key)
