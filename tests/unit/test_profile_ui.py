@@ -11,7 +11,10 @@ import pytest
 
 from models.app_error import AppError
 from services.profile_service import ProfileResult
-from ui.pages.profile_page import ProfileForm
+from ui.pages.profile_page import (
+    ProfileForm,
+    open_profile_confirmation,
+)
 
 
 def _profile() -> ProfileResult:
@@ -398,3 +401,88 @@ def test_editing_a_field_clears_its_error():
     form.clear_error("phone")
 
     assert form.error_labels["phone"].visible is False
+
+
+
+class FakeDialogPage:
+    """Giả lập những phương thức dialog cần kiểm tra."""
+
+    def __init__(self):
+        self.dialog = None
+        self.pop_count = 0
+
+    def show_dialog(self, dialog):
+        self.dialog = dialog
+        dialog.open = True
+
+    def pop_dialog(self):
+        self.pop_count += 1
+        self.dialog.open = False
+        return self.dialog
+
+
+@pytest.mark.parametrize(
+    ("button_index", "expected"),
+    [
+        (0, "cancel"),
+        (1, "confirm"),
+    ],
+)
+def test_confirmation_callback_runs_after_dialog_dismiss(
+    button_index,
+    expected,
+):
+    """Nút bấm chỉ đóng dialog; callback chạy sau on_dismiss."""
+
+    page = FakeDialogPage()
+    events = []
+
+    open_profile_confirmation(
+        page,
+        on_confirm=lambda: events.append("confirm"),
+        on_cancel=lambda: events.append("cancel"),
+    )
+
+    assert page.dialog.open is True
+
+    # Người dùng nhấn Quay lại hoặc Xác nhận cập nhật.
+    page.dialog.actions[button_index].on_click(None)
+
+    # Đã yêu cầu đóng nhưng chưa được phép xử lý nghiệp vụ.
+    assert page.pop_count == 1
+    assert page.dialog.open is False
+    assert events == []
+
+    # Mô phỏng Flet báo hiệu dialog đóng xong.
+    page.dialog.on_dismiss(None)
+
+    assert events == [expected]
+
+    # Callback không được chạy hai lần.
+    page.dialog.on_dismiss(None)
+    assert events == [expected]
+
+
+def test_confirmation_double_click_only_closes_once():
+    """Bấm Xác nhận liên tiếp không được xử lý hai lần."""
+
+    page = FakeDialogPage()
+    events = []
+
+    open_profile_confirmation(
+        page,
+        on_confirm=lambda: events.append("confirm"),
+        on_cancel=lambda: events.append("cancel"),
+    )
+
+    confirm_button = page.dialog.actions[1]
+
+    confirm_button.on_click(None)
+    confirm_button.on_click(None)
+
+    assert page.pop_count == 1
+    assert events == []
+
+    page.dialog.on_dismiss(None)
+
+    assert events == ["confirm"]
