@@ -172,3 +172,97 @@ class UserRepository(BaseRepository):
                 "now_utc": now_utc,
             },
         )
+
+
+    def get_security_by_id(
+        self,
+        user_id: int,
+        *,
+        for_update: bool = False,
+    ) -> dict[str, Any] | None:
+        """Đọc hash mật khẩu trong Service bảo mật.
+
+        Không sử dụng kết quả này để hiển thị ra giao diện.
+        """
+
+        sql = """
+            SELECT
+                id,
+                password_hash,
+                status
+            FROM users
+            WHERE id = :user_id
+            LIMIT 1
+        """
+
+        if for_update:
+            sql += " FOR UPDATE"
+
+        row = self.session.execute(
+            text(sql),
+            {"user_id": user_id},
+        ).mappings().first()
+
+        return dict(row) if row is not None else None
+
+    def update_password_hash(
+        self,
+        *,
+        user_id: int,
+        password_hash: str,
+        now_utc: datetime,
+    ) -> None:
+        """Đổi hash và cập nhật audit của chính tài khoản."""
+
+        result = self.session.execute(
+            text("""
+                UPDATE users
+                SET
+                    password_hash = :password_hash,
+                    updated_at = :now_utc,
+                    updated_by = :user_id
+                WHERE id = :user_id
+                  AND status = 'ACTIVE'
+            """),
+            {
+                "user_id": user_id,
+                "password_hash": password_hash,
+                "now_utc": now_utc,
+            },
+        )
+
+        if result.rowcount != 1:
+            raise RuntimeError(
+                "Không thể cập nhật mật khẩu cho tài khoản."
+            )
+
+    def update_avatar_url(
+        self,
+        *,
+        user_id: int,
+        avatar_url: str,
+        now_utc: datetime,
+    ) -> None:
+        """Lưu đường dẫn avatar của chính tài khoản."""
+
+        result = self.session.execute(
+            text("""
+                UPDATE users
+                SET
+                    avatar_url = :avatar_url,
+                    updated_at = :now_utc,
+                    updated_by = :user_id
+                WHERE id = :user_id
+                  AND status = 'ACTIVE'
+            """),
+            {
+                "user_id": user_id,
+                "avatar_url": avatar_url,
+                "now_utc": now_utc,
+            },
+        )
+
+        if result.rowcount != 1:
+            raise RuntimeError(
+                "Không thể cập nhật ảnh đại diện."
+            )
