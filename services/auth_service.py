@@ -7,6 +7,7 @@ US02 - Task 14: require_user và logout.
 """
 
 from collections.abc import Callable, Collection
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import NoReturn
 
@@ -308,16 +309,18 @@ class AuthService(BaseService):
             status=user["status"],
         )
 
+
     @staticmethod
     def logout(
         *,
         session_store: AuthSessionStore,
     ) -> None:
-        """Xóa dữ liệu đăng nhập và dữ liệu tạm của người dùng.
+        """Đăng xuất và xóa trạng thái người dùng trong session.
 
-        Không xóa toàn bộ Session Store của Flet.
-        Chuyển hướng về trang công khai được UI xử lý ở Task 15.
+        Khóa chưa tồn tại được bỏ qua để logout luôn an toàn.
+        Không xóa các tùy chọn giao diện không liên quan.
         """
 
         for key in SESSION_KEYS_TO_CLEAR:
-            session_store.remove(key)
+            with suppress(KeyError):
+                session_store.remove(key)

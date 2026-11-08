@@ -323,3 +323,48 @@ def test_cached_role_cannot_override_database_role(
 
     assert caught.value.error_code == "FORBIDDEN"
     assert store.get(AUTH_SESSION_USER_ID_KEY) == 42
+
+
+def test_logout_with_missing_keys_like_real_flet():
+    """Logout không lỗi khi Flet Session thiếu cart/checkout/cache."""
+
+    class StrictFletSessionStore:
+        """Mô phỏng hành vi remove() thực tế của Flet."""
+
+        def __init__(self):
+            self.data = {
+                AUTH_SESSION_USER_ID_KEY: 42,
+                "phone_shop.ui.theme": "dark",
+            }
+
+        def set(self, key, value):
+            self.data[key] = value
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def remove(self, key):
+            # Giống Flet: không có key thì phát sinh KeyError.
+            self.data.pop(key)
+
+    store = StrictFletSessionStore()
+
+    # Ban đầu chỉ có user_id, chưa có giỏ hàng.
+    assert store.get(AUTH_SESSION_USER_ID_KEY) == 42
+
+    # Phải đăng xuất thành công, không bị KeyError.
+    AuthService.logout(session_store=store)
+
+    assert store.get(AUTH_SESSION_USER_ID_KEY) is None
+
+    # Tùy chọn giao diện vẫn được giữ.
+    assert store.data == {
+        "phone_shop.ui.theme": "dark",
+    }
+
+    # Đăng xuất thêm lần nữa cũng không được phát sinh lỗi.
+    AuthService.logout(session_store=store)
+
+    assert store.data == {
+        "phone_shop.ui.theme": "dark",
+    }
