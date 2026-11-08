@@ -1,7 +1,8 @@
 
-"""Validate dữ liệu đăng ký tài khoản (US01 - Task 10).
+"""Các hàm validation dùng chung của Phone Shop.
 
-Không kết nối database, không hash và không đổi mật khẩu người dùng.
+Task 10: Đăng ký tài khoản.
+Task 17: Địa chỉ hồ sơ cá nhân.
 """
 
 import re
@@ -42,7 +43,7 @@ def validate_email(value: str) -> str:
 
 
 def validate_full_name(value: str) -> str:
-    """Loại khoảng trắng dư và kiểm tra họ tên."""
+    """Chuẩn hóa họ tên và kiểm tra độ dài."""
 
     if not isinstance(value, str):
         _invalid("full_name", "Họ tên phải là chuỗi ký tự.")
@@ -59,7 +60,7 @@ def validate_full_name(value: str) -> str:
 
 
 def validate_phone(value: str) -> str:
-    """Số điện thoại: 10 chữ số ASCII, bắt đầu bằng 0."""
+    """Số điện thoại gồm 10 chữ số ASCII, bắt đầu bằng 0."""
 
     if not isinstance(value, str):
         _invalid(
@@ -79,7 +80,7 @@ def validate_phone(value: str) -> str:
 
 
 def validate_password(value: str) -> str:
-    """Kiểm tra mật khẩu không quá 72 byte UTF-8 cho bcrypt."""
+    """Mật khẩu từ 8 ký tự, tối đa 72 byte UTF-8."""
 
     if not isinstance(value, str):
         _invalid(
@@ -114,7 +115,7 @@ def validate_confirm_password(
     password: str,
     confirmation: str,
 ) -> None:
-    """Xác nhận phải trùng chính xác mật khẩu đã nhập."""
+    """Xác nhận mật khẩu phải trùng chính xác."""
 
     if (
         not isinstance(confirmation, str)
@@ -124,3 +125,26 @@ def validate_confirm_password(
             "confirm_password",
             "Xác nhận mật khẩu không khớp.",
         )
+
+
+def validate_address(value: str | None) -> str | None:
+    """Địa chỉ cho phép NULL, tối đa 255 ký tự."""
+
+    if value is None:
+        return None
+
+    if not isinstance(value, str):
+        _invalid(
+            "address",
+            "Địa chỉ phải là chuỗi ký tự.",
+        )
+
+    address = value.strip()
+
+    if len(address) > 255:
+        _invalid(
+            "address",
+            "Địa chỉ không được vượt quá 255 ký tự.",
+        )
+
+    return address or None
