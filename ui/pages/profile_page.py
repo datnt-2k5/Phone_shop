@@ -24,6 +24,79 @@ from utils.validators import (
 logger = logging.getLogger(__name__)
 
 
+def open_profile_confirmation(
+    page: ft.Page,
+    *,
+    on_confirm: Callable[[], None],
+    on_cancel: Callable[[], None],
+) -> None:
+    """Mở hộp thoại và chỉ xử lý sau khi đã đóng hoàn toàn.
+
+    Tránh dựng lại page.views trong lúc dialog vẫn đang đóng.
+    """
+
+    state = {
+        "choice": None,
+        "handled": False,
+    }
+
+    def close_with_choice(choice: str) -> None:
+        """Ghi nhận lựa chọn và yêu cầu Flet đóng dialog."""
+
+        # Ngăn thao tác lặp khi người dùng nhấn nút nhiều lần.
+        if state["choice"] is not None:
+            return
+
+        state["choice"] = choice
+
+        # Chỉ đóng hộp thoại; chưa cập nhật database.
+        page.pop_dialog()
+
+    def confirm_click(e) -> None:
+        close_with_choice("confirm")
+
+    def cancel_click(e) -> None:
+        close_with_choice("cancel")
+
+    def handle_dismiss(e) -> None:
+        """Chạy khi Flet đã kết thúc việc đóng dialog."""
+
+        if state["handled"]:
+            return
+
+        state["handled"] = True
+
+        if state["choice"] == "confirm":
+            # Bây giờ mới gọi ProfileService để lưu.
+            on_confirm()
+        else:
+            # Quay lại hoặc dialog bị đóng không xác nhận.
+            on_cancel()
+
+    dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Xác nhận cập nhật hồ sơ"),
+        content=ft.Text(
+            "Bạn có chắc chắn muốn lưu những thay đổi "
+            "trong thông tin cá nhân không?"
+        ),
+        actions=[
+            ft.TextButton(
+                "Quay lại",
+                on_click=cancel_click,
+            ),
+            ft.Button(
+                "Xác nhận cập nhật",
+                on_click=confirm_click,
+            ),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+        on_dismiss=handle_dismiss,
+    )
+
+    page.show_dialog(dialog)
+
+
 def _display_time(value: datetime | None) -> str:
     """Hiển thị thời gian UTC theo giờ Việt Nam."""
     if value is None:
@@ -584,41 +657,18 @@ def build_profile_page(
     """Kết nối giao diện với ProfileService và Flet Session."""
     service = ProfileService()
 
+
     def show_confirmation(
         on_confirm: Callable[[], None],
         on_cancel: Callable[[], None],
     ) -> None:
-        """Hộp thoại xác nhận trước khi lưu."""
+        """Yêu cầu xác nhận với vòng đời dialog an toàn."""
 
-        def confirm_click(e) -> None:
-            page.pop_dialog()
-            on_confirm()
-
-        def cancel_click(e) -> None:
-            page.pop_dialog()
-            on_cancel()
-
-        dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Xác nhận cập nhật hồ sơ"),
-            content=ft.Text(
-                "Bạn có chắc chắn muốn lưu những thay đổi "
-                "trong thông tin cá nhân không?"
-            ),
-            actions=[
-                ft.TextButton(
-                    "Quay lại",
-                    on_click=cancel_click,
-                ),
-                ft.Button(
-                    "Xác nhận cập nhật",
-                    on_click=confirm_click,
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+        open_profile_confirmation(
+            page,
+            on_confirm=on_confirm,
+            on_cancel=on_cancel,
         )
-
-        page.show_dialog(dialog)
 
     form = ProfileForm(
         load_action=lambda: service.get_my_profile(
