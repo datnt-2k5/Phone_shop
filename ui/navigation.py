@@ -1,4 +1,10 @@
-"""Cấu hình menu dùng cho UI demo Task 6, KHÔNG phải kiểm tra bảo mật."""
+
+"""Menu và quy tắc điều hướng của Phone Shop.
+
+Task 6: Cấu hình menu mẫu.
+Task 15: Điều hướng theo role đã xác thực.
+Bảo vệ nghiệp vụ thật luôn nằm tại Service Layer.
+"""
 
 from dataclasses import dataclass
 
@@ -33,11 +39,25 @@ MENU: tuple[MenuItem, ...] = (
 
 PUBLIC = ("/", "/products")
 GUEST = PUBLIC + ("/login", "/register")
-CUSTOMER = PUBLIC + ("/profile", "/cart", "/my-orders", "/my-invoices")
-ADMIN = PUBLIC + ("/profile",) + tuple(
-    item.route for item in MENU if item.route.startswith("/admin/")
+
+CUSTOMER = PUBLIC + (
+    "/profile",
+    "/cart",
+    "/my-orders",
+    "/my-invoices",
 )
-SUPER_ADMIN = ADMIN + ("/super/accounts", "/super/settings")
+
+ADMIN = PUBLIC + ("/profile",) + tuple(
+    item.route
+    for item in MENU
+    if item.route.startswith("/admin/")
+)
+
+SUPER_ADMIN = ADMIN + (
+    "/super/accounts",
+    "/super/settings",
+)
+
 
 ROLE_ROUTES = {
     "GUEST": GUEST,
@@ -54,14 +74,50 @@ ROLE_LABELS = {
 }
 
 
+# Nơi điều hướng ngay sau khi đăng nhập thành công.
+LOGIN_DESTINATIONS = {
+    "CUSTOMER": "/profile",
+    "ADMIN": "/admin/dashboard",
+    "SUPER_ADMIN": "/super/accounts",
+}
+
+
 def menu_for_role(role: str) -> tuple[MenuItem, ...]:
-    """Trả menu để hiển thị. Tuyệt đối không dùng làm xác thực/ủy quyền."""
+    """Menu hiển thị theo role; không thay Service Guard."""
+
     if role not in ROLE_ROUTES:
         raise ValueError(f"Vai trò không hợp lệ: {role}")
+
     routes = ROLE_ROUTES[role]
-    return tuple(item for item in MENU if item.route in routes)
+    return tuple(
+        item
+        for item in MENU
+        if item.route in routes
+    )
 
 
 def demo_route_visible(role: str, route: str) -> bool:
-    """Chỉ dùng để hiển thị trang mẫu; bảo mật thật sẽ nằm ở Service Layer."""
+    """Giữ tương thích với kiểm thử Task 6."""
+
+    return route in ROLE_ROUTES.get(role, ())
+
+
+def home_route_for_role(role: str) -> str:
+    """Trả trang đích cho role sau đăng nhập."""
+
+    if role not in LOGIN_DESTINATIONS:
+        raise ValueError(
+            f"Không có trang đích cho role: {role}"
+        )
+
+    return LOGIN_DESTINATIONS[role]
+
+
+def route_available(role: str, route: str) -> bool:
+    """Kiểm tra quyền hiển thị route ở tầng giao diện.
+
+    Role phải được lấy từ require_user(), không lấy từ
+    nút chọn vai trò hay dữ liệu client tự khai báo.
+    """
+
     return route in ROLE_ROUTES.get(role, ())
