@@ -30,6 +30,7 @@ from ui.navigation import (
     route_available,
 )
 from ui.pages.login_page import build_login_page
+from ui.pages.profile_page import build_profile_page
 from ui.pages.register_page import build_register_page
 
 
@@ -266,6 +267,13 @@ def main(page: ft.Page) -> None:
         # Trang đăng ký thật - Task 11
         if route == "/register":
             return build_register_page(page)
+
+        # Trang hồ sơ cá nhân thật - US03 Task 18.
+        if route == "/profile":
+            return build_profile_page(
+                page,
+                on_saved=render_route,
+            )
 
         title = next(
             item.label
