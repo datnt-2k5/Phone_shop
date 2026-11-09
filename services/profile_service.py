@@ -39,6 +39,7 @@ class ProfileResult:
     created_at: datetime
     updated_at: datetime
     updated_by: int | None
+    avatar_url: str | None = None
 
 
 class ProfileService(BaseService):
@@ -95,6 +96,7 @@ class ProfileService(BaseService):
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             updated_by=row["updated_by"],
+            avatar_url=row.get("avatar_url"),
         )
 
     def get_my_profile(
