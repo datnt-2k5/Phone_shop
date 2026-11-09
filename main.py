@@ -22,7 +22,6 @@ from services.auth_session import AUTH_SESSION_USER_ID_KEY
 from ui.components.money_format import format_vnd
 from ui.components.notifications import notify
 from ui.navigation import (
-    GUEST,
     MENU,
     ROLE_LABELS,
     home_route_for_role,
@@ -32,6 +31,7 @@ from ui.navigation import (
 from ui.pages.login_page import build_login_page
 from ui.pages.profile_page import build_profile_page
 from ui.pages.register_page import build_register_page
+from ui.route_guard import check_route_access
 
 
 def main(page: ft.Page) -> None:
@@ -387,32 +387,35 @@ def main(page: ft.Page) -> None:
             ],
         )
 
+
     def render_route(e=None) -> None:
-        """Dựng lại View dựa trên route và session thật."""
+        """US04: kiểm tra quyền trước khi dựng màn hình.
+
+        Danh tính và role phải được lấy từ MariaDB thông qua
+        current_user() -> AuthService.require_user().
+        """
 
         route = page.route or "/"
+
+        # 1. Kiểm tra phiên và đọc lại role từ database.
         user = current_user()
+        role = user.role if user is not None else "GUEST"
 
-        # Người đã đăng nhập không cần mở lại login/register.
-        if (
-            user is not None
-            and route in {"/login", "/register"}
-        ):
-            page.navigate(
-                home_route_for_role(user.role)
-            )
+        # 2. Kiểm tra URL trước khi dựng View.
+        decision = check_route_access(
+            route=route,
+            role=role,
+        )
+
+        # 3. Guest vào trang bảo vệ -> login.
+        #    Đã đăng nhập vào login/register -> trang theo role.
+        if decision.redirect_to is not None:
+            page.navigate(decision.redirect_to)
             return
 
-        # Khách chưa đăng nhập mở route bảo vệ:
-        # chuyển về trang đăng nhập.
-        if (
-            user is None
-            and route in known_routes
-            and route not in GUEST
-        ):
-            page.navigate("/login")
-            return
-
+        # 4. Dựng lại View chỉ sau khi Route Guard kiểm tra.
+        # content_for() hiện có vẫn hiển thị 403 hoặc 404
+        # khi decision không phải ALLOW.
         page.views.clear()
         page.views.append(
             build_view("/", user)
@@ -424,6 +427,7 @@ def main(page: ft.Page) -> None:
             )
 
         page.update()
+
 
     async def view_pop(e) -> None:
         """Xử lý nút Back của Flet."""
@@ -440,5 +444,10 @@ def main(page: ft.Page) -> None:
     render_route()
 
 
+
 if __name__ == "__main__":
-    ft.run(main, assets_dir="assets")
+    ft.run(
+        main,
+        assets_dir="assets",
+        route_url_strategy="hash",
+    )

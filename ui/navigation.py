@@ -1,12 +1,10 @@
 
-"""Menu và quy tắc điều hướng của Phone Shop.
-
-Task 6: Cấu hình menu mẫu.
-Task 15: Điều hướng theo role đã xác thực.
-Bảo vệ nghiệp vụ thật luôn nằm tại Service Layer.
-"""
+"""Menu và Route theo vai trò, đồng bộ ma trận US04."""
 
 from dataclasses import dataclass
+from types import MappingProxyType
+
+from services.permissions import PERMISSION_MATRIX, Access, Permission, Role
 
 
 @dataclass(frozen=True)
@@ -37,6 +35,7 @@ MENU: tuple[MenuItem, ...] = (
     MenuItem("Cấu hình hệ thống", "/super/settings"),
 )
 
+# Giữ các hằng số cũ để không phá vỡ Task 1–22.
 PUBLIC = ("/", "/products")
 GUEST = PUBLIC + ("/login", "/register")
 
@@ -58,7 +57,6 @@ SUPER_ADMIN = ADMIN + (
     "/super/settings",
 )
 
-
 ROLE_ROUTES = {
     "GUEST": GUEST,
     "CUSTOMER": CUSTOMER,
@@ -73,51 +71,72 @@ ROLE_LABELS = {
     "SUPER_ADMIN": "Quản trị cấp cao",
 }
 
-
-# Nơi điều hướng ngay sau khi đăng nhập thành công.
 LOGIN_DESTINATIONS = {
     "CUSTOMER": "/profile",
     "ADMIN": "/admin/dashboard",
     "SUPER_ADMIN": "/super/accounts",
 }
 
+# Map mỗi route tới quyền nghiệp vụ đã khai báo ở Task 22.
+# ROLE_ROUTES vẫn xác định loại giao diện được phép truy cập.
+ROUTE_PERMISSIONS = MappingProxyType({
+    "/": Permission.VIEW_PRODUCTS,
+    "/products": Permission.VIEW_PRODUCTS,
+    "/login": Permission.LOGIN,
+    "/register": Permission.REGISTER,
+    "/profile": Permission.VIEW_PROFILE,
+    "/cart": Permission.PLACE_ORDER,
+    "/my-orders": Permission.VIEW_ORDERS,
+    "/my-invoices": Permission.VIEW_INVOICES,
+    "/admin/dashboard": Permission.VIEW_STATISTICS,
+    "/admin/products": Permission.MANAGE_PRODUCTS,
+    "/admin/catalog": Permission.MANAGE_BRANDS,
+    "/admin/imports": Permission.IMPORT_STOCK,
+    "/admin/inventory": Permission.VIEW_INVENTORY,
+    "/admin/orders": Permission.VIEW_ORDERS,
+    "/admin/customers": Permission.VIEW_CUSTOMERS,
+    "/admin/invoices": Permission.VIEW_INVOICES,
+    "/admin/reports": Permission.VIEW_STATISTICS,
+    "/super/accounts": Permission.MANAGE_ACCOUNTS,
+    "/super/settings": Permission.MANAGE_SETTINGS,
+})
+
+
+def route_available(role: str, route: str) -> bool:
+    """Kiểm tra đồng thời giới hạn route và ma trận quyền."""
+    if role not in ROLE_ROUTES or route not in ROLE_ROUTES[role]:
+        return False
+
+    permission = ROUTE_PERMISSIONS.get(route)
+
+    return (
+        permission is not None
+        and PERMISSION_MATRIX[permission][Role(role)] != Access.DENY
+    )
+
 
 def menu_for_role(role: str) -> tuple[MenuItem, ...]:
-    """Menu hiển thị theo role; không thay Service Guard."""
-
+    """Chỉ trả về menu được phép theo role."""
     if role not in ROLE_ROUTES:
         raise ValueError(f"Vai trò không hợp lệ: {role}")
 
-    routes = ROLE_ROUTES[role]
     return tuple(
         item
         for item in MENU
-        if item.route in routes
+        if route_available(role, item.route)
     )
 
 
 def demo_route_visible(role: str, route: str) -> bool:
-    """Giữ tương thích với kiểm thử Task 6."""
-
-    return route in ROLE_ROUTES.get(role, ())
+    """Giữ tương thích các bài test của Task 6."""
+    return route_available(role, route)
 
 
 def home_route_for_role(role: str) -> str:
-    """Trả trang đích cho role sau đăng nhập."""
-
+    """Trang đích sau khi đăng nhập thành công."""
     if role not in LOGIN_DESTINATIONS:
         raise ValueError(
             f"Không có trang đích cho role: {role}"
         )
 
     return LOGIN_DESTINATIONS[role]
-
-
-def route_available(role: str, route: str) -> bool:
-    """Kiểm tra quyền hiển thị route ở tầng giao diện.
-
-    Role phải được lấy từ require_user(), không lấy từ
-    nút chọn vai trò hay dữ liệu client tự khai báo.
-    """
-
-    return route in ROLE_ROUTES.get(role, ())
