@@ -61,6 +61,7 @@ class UserRepository(BaseRepository):
                 full_name,
                 phone,
                 address,
+                avatar_url,
                 role,
                 status,
                 created_at,

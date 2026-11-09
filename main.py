@@ -43,6 +43,9 @@ def main(page: ft.Page) -> None:
     page.padding = 0
 
     auth_service = AuthService()
+    # Task 21: FilePicker dùng chung trong trang hồ sơ.
+    avatar_picker = ft.FilePicker()
+    page.services.append(avatar_picker)
     known_routes = {
         item.route
         for item in MENU
@@ -273,6 +276,7 @@ def main(page: ft.Page) -> None:
             return build_profile_page(
                 page,
                 on_saved=render_route,
+                file_picker=avatar_picker,
             )
 
         title = next(
@@ -437,4 +441,4 @@ def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, assets_dir="assets")

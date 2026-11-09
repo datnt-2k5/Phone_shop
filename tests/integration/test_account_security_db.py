@@ -23,6 +23,7 @@ from services.account_security_service import (
 )
 from services.auth_service import AuthService
 from services.auth_session import AUTH_SESSION_USER_ID_KEY
+from services.profile_service import ProfileService
 from utils.time_utils import FixedClock
 
 OLD_PASSWORD = "MatKhau123!"
@@ -465,3 +466,29 @@ def test_guest_cannot_modify_account(
 
     assert caught.value.error_code == "UNAUTHORIZED"
     assert read_account(db, registered.user_id) == before
+
+
+def test_uploaded_avatar_visible_in_profile(account_context):
+    """Upload avatar rồi đọc lại từ ProfileService."""
+
+    context = account_context
+
+    uploaded = context["security"].upload_avatar(
+        session_store=context["store"],
+        image_bytes=make_image("PNG"),
+    )
+
+    profile_service = ProfileService(
+        session_factory=make_session_factory(
+            context["db"]
+        ),
+    )
+
+    profile = profile_service.get_my_profile(
+        session_store=context["store"],
+    )
+
+    assert profile.user_id == uploaded.user_id
+    assert profile.avatar_url == uploaded.avatar_url
+    assert profile.avatar_url.startswith("avatars/")
+    assert profile.avatar_url.endswith(".png")

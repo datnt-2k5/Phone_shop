@@ -12,8 +12,13 @@ from datetime import datetime
 import flet as ft
 
 from models.app_error import AppError
+from services.account_security_service import AccountSecurityService
 from services.profile_service import ProfileResult, ProfileService
 from ui.components.notifications import notify
+from ui.pages.account_security_section import (
+    AccountSecuritySection,
+    open_security_confirmation,
+)
 from utils.time_utils import utc_to_vn
 from utils.validators import (
     validate_address,
@@ -24,12 +29,19 @@ from utils.validators import (
 logger = logging.getLogger(__name__)
 
 
+
 def open_profile_confirmation(
     page: ft.Page,
     *,
     on_confirm: Callable[[], None],
     on_cancel: Callable[[], None],
+    title: str = "Xác nhận cập nhật hồ sơ",
+    message: str = (
+        "Bạn có chắc chắn muốn lưu những thay đổi "
+        "trong thông tin cá nhân không?"
+    ),
 ) -> None:
+
     """Mở hộp thoại và chỉ xử lý sau khi đã đóng hoàn toàn.
 
     Tránh dựng lại page.views trong lúc dialog vẫn đang đóng.
@@ -75,11 +87,8 @@ def open_profile_confirmation(
 
     dialog = ft.AlertDialog(
         modal=True,
-        title=ft.Text("Xác nhận cập nhật hồ sơ"),
-        content=ft.Text(
-            "Bạn có chắc chắn muốn lưu những thay đổi "
-            "trong thông tin cá nhân không?"
-        ),
+        title=ft.Text(title),
+        content=ft.Text(message),
         actions=[
             ft.TextButton(
                 "Quay lại",
@@ -649,36 +658,42 @@ class ProfileForm:
             self._on_saved()
 
 
+
+
 def build_profile_page(
     page: ft.Page,
     *,
     on_saved: Callable[[], None],
+    file_picker: ft.FilePicker,
 ) -> ft.Column:
-    """Kết nối giao diện với ProfileService và Flet Session."""
-    service = ProfileService()
+    """Trang hồ sơ P1 kết hợp chức năng bảo mật P2."""
 
+    profile_service = ProfileService()
+    security_service = AccountSecurityService()
 
-    def show_confirmation(
+    # 1. Xác nhận chỉnh sửa hồ sơ P1.
+    def confirm_profile(
         on_confirm: Callable[[], None],
         on_cancel: Callable[[], None],
     ) -> None:
-        """Yêu cầu xác nhận với vòng đời dialog an toàn."""
-
         open_profile_confirmation(
             page,
             on_confirm=on_confirm,
             on_cancel=on_cancel,
         )
 
+    # 2. Giữ nguyên ProfileForm Task 18.
     form = ProfileForm(
-        load_action=lambda: service.get_my_profile(
+        load_action=lambda: profile_service.get_my_profile(
             session_store=page.session.store,
         ),
-        save_action=lambda **values: service.update_my_profile(
-            session_store=page.session.store,
-            **values,
+        save_action=lambda **values: (
+            profile_service.update_my_profile(
+                session_store=page.session.store,
+                **values,
+            )
         ),
-        ask_confirmation=show_confirmation,
+        ask_confirmation=confirm_profile,
         notify_user=lambda message, error: notify(
             page,
             message,
@@ -689,13 +704,63 @@ def build_profile_page(
         on_auth_lost=lambda: page.navigate("/login"),
     )
 
-    # Nạp hồ sơ khi truy cập trang.
     form.load(refresh=False)
 
+    # Avatar đã lưu trong MariaDB, nếu có.
+    initial_avatar_url = (
+        form._profile.avatar_url
+        if form._profile is not None
+        else None
+    )
+
+    # 3. Giao diện P2 sử dụng Service Task 20.
+    security_section = AccountSecuritySection(
+        password_action=lambda **values: (
+            security_service.change_password(
+                session_store=page.session.store,
+                **values,
+            )
+        ),
+        avatar_action=lambda **values: (
+            security_service.upload_avatar(
+                session_store=page.session.store,
+                **values,
+            )
+        ),
+        ask_confirmation=lambda title, message, yes, no: (
+            open_security_confirmation(
+                page,
+                title,
+                message,
+                yes,
+                no,
+            )
+        ),
+        notify_user=lambda message, error: notify(
+            page,
+            message,
+            error=error,
+        ),
+        refresh=page.update,
+        on_password_changed=lambda: page.navigate("/login"),
+        on_avatar_saved=on_saved,
+        on_auth_lost=lambda: page.navigate("/login"),
+        file_picker=file_picker,
+        initial_avatar_url=initial_avatar_url,
+    )
+
+    # 4. Bố cục: hồ sơ cũ phía trên, bảo mật phía dưới.
     return ft.Column(
         controls=[
             ft.Container(
                 content=form.content,
+                width=580,
+                padding=22,
+                border_radius=16,
+                bgcolor=ft.Colors.WHITE,
+            ),
+            ft.Container(
+                content=security_section.content,
                 width=580,
                 padding=22,
                 border_radius=16,
@@ -706,5 +771,5 @@ def build_profile_page(
                 on_click=lambda e: page.navigate("/"),
             ),
         ],
-        spacing=12,
+        spacing=16,
     )
