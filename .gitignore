@@ -55,3 +55,6 @@ Thumbs.db
 
 # US03 - Uploaded profile pictures
 /assets/avatars/
+
+# US05 - Uploaded product images
+/assets/products/
