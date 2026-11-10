@@ -29,6 +29,7 @@ from ui.navigation import (
     route_available,
 )
 from ui.pages.login_page import build_login_page
+from ui.pages.product_management_page import build_product_management_page
 from ui.pages.profile_page import build_profile_page
 from ui.pages.register_page import build_register_page
 from ui.route_guard import check_route_access
@@ -278,6 +279,11 @@ def main(page: ft.Page) -> None:
                 on_saved=render_route,
                 file_picker=avatar_picker,
             )
+
+        # Task 30 – Giao diện quản lý sản phẩm.
+        # Đã đi qua Route Guard phía trên.
+        if route == "/admin/products":
+            return build_product_management_page(page)
 
         title = next(
             item.label
