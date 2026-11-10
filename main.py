@@ -28,6 +28,7 @@ from ui.navigation import (
     menu_for_role,
     route_available,
 )
+from ui.pages.catalog_page import build_catalog_page
 from ui.pages.login_page import build_login_page
 from ui.pages.product_management_page import build_product_management_page
 from ui.pages.profile_page import build_profile_page
@@ -284,6 +285,11 @@ def main(page: ft.Page) -> None:
         # Đã đi qua Route Guard phía trên.
         if route == "/admin/products":
             return build_product_management_page(page)
+
+        # Task 35 – US06: Hãng và nhà cung cấp.
+        # Route Guard đã kiểm tra role phía trên.
+        if route == "/admin/catalog":
+            return build_catalog_page(page)
 
         title = next(
             item.label
