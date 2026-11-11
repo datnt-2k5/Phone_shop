@@ -228,6 +228,10 @@ class PublicProductsPanel:
     def open_products(self, e=None) -> None:
         self.page.navigate("/products")
 
+    def open_detail(self, product_id: int) -> None:
+        """Open one product without changing its data."""
+        self.page.navigate(f"/products/{product_id}")
+
     def load(self) -> None:
         """Load data before the panel is attached to the View."""
         if not self.home:
@@ -396,7 +400,11 @@ class PublicProductsPanel:
             self.search()
 
     @staticmethod
-    def make_card(row: dict[str, Any]) -> ft.Card:
+    def make_card(
+        row: dict[str, Any],
+        *,
+        on_open: Any = None,
+    ) -> ft.Card:
         """Render only fields allowed in public product responses."""
         image_url = row.get("image_url")
 
@@ -457,12 +465,8 @@ class PublicProductsPanel:
                             size=17,
                             weight=ft.FontWeight.BOLD,
                         ),
-                        ft.Text(
-                            f"Hãng: {row['brand_name']}"
-                        ),
-                        ft.Text(
-                            f"{row['storage']} | {row['color']}"
-                        ),
+                        ft.Text(f"Hãng: {row['brand_name']}"),
+                        ft.Text(f"{row['storage']} | {row['color']}"),
                         ft.Text(
                             format_vnd(row["sell_price"]),
                             size=19,
@@ -472,6 +476,16 @@ class PublicProductsPanel:
                         ft.Text(
                             availability,
                             color=availability_color,
+                        ),
+                        *(
+                            [
+                                ft.Button(
+                                    "Xem chi tiết",
+                                    on_click=on_open,
+                                )
+                            ]
+                            if on_open is not None
+                            else []
                         ),
                     ],
                 ),
@@ -488,9 +502,16 @@ class PublicProductsPanel:
             return
 
         self.cards.controls = [
-            self.make_card(row)
+            self.make_card(
+                row,
+                on_open=(
+                    lambda e, pid=row["id"]:
+                    self.open_detail(pid)
+                ),
+            )
             for row in self.items
         ]
+
 
 
 def build_public_home_page(page: ft.Page) -> ft.Column:
