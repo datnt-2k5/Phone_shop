@@ -34,6 +34,10 @@ from ui.pages.inventory_page import build_inventory_page
 from ui.pages.login_page import build_login_page
 from ui.pages.product_management_page import build_product_management_page
 from ui.pages.profile_page import build_profile_page
+from ui.pages.public_products_page import (
+    build_public_home_page,
+    build_public_products_page,
+)
 from ui.pages.register_page import build_register_page
 from ui.pages.stock_adjustment_page import build_stock_adjustment_page
 from ui.route_guard import check_route_access
@@ -264,6 +268,14 @@ def main(page: ft.Page) -> None:
                     ),
                 ],
             )
+
+        # Task 45 – US08: Public home and product listing.
+        # These pages work for Guest and all signed-in roles.
+        if route == "/":
+            return build_public_home_page(page)
+
+        if route == "/products":
+            return build_public_products_page(page)
 
         # Trang đăng nhập thật - Task 15
         if route == "/login":
