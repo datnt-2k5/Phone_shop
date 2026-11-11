@@ -29,6 +29,8 @@ from ui.navigation import (
     route_available,
 )
 from ui.pages.catalog_page import build_catalog_page
+from ui.pages.import_page import build_import_page
+from ui.pages.inventory_page import build_inventory_page
 from ui.pages.login_page import build_login_page
 from ui.pages.product_management_page import build_product_management_page
 from ui.pages.profile_page import build_profile_page
@@ -290,6 +292,14 @@ def main(page: ft.Page) -> None:
         # Route Guard đã kiểm tra role phía trên.
         if route == "/admin/catalog":
             return build_catalog_page(page)
+
+        # Task 40 – US07: Lập phiếu nhập và lịch sử nhập kho.
+        if route == "/admin/imports":
+            return build_import_page(page)
+
+        # Task 40 – US07: Tồn kho và lịch sử biến động.
+        if route == "/admin/inventory":
+            return build_inventory_page(page)
 
         title = next(
             item.label
