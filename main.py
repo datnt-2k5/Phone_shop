@@ -34,13 +34,19 @@ from ui.pages.inventory_page import build_inventory_page
 from ui.pages.login_page import build_login_page
 from ui.pages.product_management_page import build_product_management_page
 from ui.pages.profile_page import build_profile_page
+from ui.pages.public_product_detail_page import (
+    build_public_product_detail_page,
+)
 from ui.pages.public_products_page import (
     build_public_home_page,
     build_public_products_page,
 )
 from ui.pages.register_page import build_register_page
 from ui.pages.stock_adjustment_page import build_stock_adjustment_page
-from ui.route_guard import check_route_access
+from ui.route_guard import (
+    check_route_access,
+    public_product_id,
+)
 
 
 def main(page: ft.Page) -> None:
@@ -242,7 +248,15 @@ def main(page: ft.Page) -> None:
     ) -> ft.Column:
         """Tạo nội dung trang sau khi kiểm tra route."""
 
-        if route not in known_routes:
+        detail_id = public_product_id(route)
+
+        permission_route = (
+            "/products"
+            if detail_id is not None
+            else route
+        )
+
+        if permission_route not in known_routes:
             return ft.Column(
                 controls=[
                     ft.Text(
@@ -255,7 +269,7 @@ def main(page: ft.Page) -> None:
         role = user.role if user is not None else "GUEST"
 
         # Không render nội dung khi role không đủ quyền.
-        if not route_available(role, route):
+        if not route_available(role, permission_route):
             return ft.Column(
                 controls=[
                     ft.Text(
@@ -276,6 +290,12 @@ def main(page: ft.Page) -> None:
 
         if route == "/products":
             return build_public_products_page(page)
+        # Task 46 – US08: public product detail.
+        if detail_id is not None:
+            return build_public_product_detail_page(
+                page,
+                product_id=detail_id,
+            )
 
         # Trang đăng nhập thật - Task 15
         if route == "/login":
