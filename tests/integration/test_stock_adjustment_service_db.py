@@ -538,3 +538,153 @@ def test_check_constraint_rejects_inconsistent_delta(env):
 
     assert len(adjustment_items(env, result["id"])) == 1
     assert stock(env, c)["stock"] == 3
+
+
+def test_repeat_same_count_creates_no_second_document_or_movement(env):
+    a = env["products"]["a"]
+
+    first = run_adjustment(
+        env,
+        [counted(a, 8)],
+    )
+    second = run_adjustment(
+        env,
+        [counted(a, 8)],
+    )
+
+    assert first["created"] is True
+    assert second["created"] is False
+    assert adjustment_count(env) == 1
+
+    assert stock(env, a)["stock"] == 8
+    assert (
+        stock(env, a)["cost_price"]
+        == Decimal("100.00")
+    )
+
+    assert len(movements(env, a)) == 1
+    assert movements(env, a)[0]["operation_key"] == (
+        f"ADJUST:{first['id']}:{a}"
+    )
+
+
+def test_adjustment_read_history_and_detail_with_product_names(env):
+    a = env["products"]["a"]
+
+    created = run_adjustment(
+        env,
+        [counted(a, 8)],
+    )
+
+    rows = env["service"].list_adjustments(
+        session_store=env["people"]["admin"]["store"],
+        limit=20,
+        offset=0,
+    )
+
+    assert any(
+        row["id"] == created["id"]
+        and row["changed_items"] == 1
+        for row in rows
+    )
+
+    detail = env["service"].get_adjustment(
+        session_store=env["people"]["admin"]["store"],
+        adjustment_id=created["id"],
+    )
+
+    assert (
+        detail["adjustment"]["code"]
+        == created["code"]
+    )
+    assert len(detail["items"]) == 1
+    assert detail["items"][0]["product_id"] == a
+    assert detail["items"][0]["sku"].startswith("T42-")
+    assert detail["items"][0]["quantity_change"] == -2
+
+
+def test_customer_cannot_read_adjustment_history_or_detail(env):
+    a = env["products"]["a"]
+
+    created = run_adjustment(
+        env,
+        [counted(a, 8)],
+    )
+
+    customer_store = (
+        env["people"]["customer"]["store"]
+    )
+
+    with pytest.raises(AppError) as history_error:
+        env["service"].list_adjustments(
+            session_store=customer_store
+        )
+
+    assert (
+        history_error.value.error_code
+        == "FORBIDDEN"
+    )
+
+    with pytest.raises(AppError) as detail_error:
+        env["service"].get_adjustment(
+            session_store=customer_store,
+            adjustment_id=created["id"],
+        )
+
+    assert (
+        detail_error.value.error_code
+        == "FORBIDDEN"
+    )
+
+
+def test_multiple_adjustments_preserve_cost_and_unique_operations(env):
+    a = env["products"]["a"]
+
+    one = run_adjustment(
+        env,
+        [counted(a, 12)],
+    )
+    two = run_adjustment(
+        env,
+        [counted(a, 8)],
+    )
+    three = run_adjustment(
+        env,
+        [counted(a, 0)],
+    )
+
+    assert [
+        one["created"],
+        two["created"],
+        three["created"],
+    ] == [True, True, True]
+
+    balance = stock(env, a)
+
+    assert balance["stock"] == 0
+    assert (
+        balance["cost_price"]
+        == Decimal("100.00")
+    )
+
+    events = movements(env, a)
+
+    assert [
+        row["quantity_change"]
+        for row in events
+    ] == [2, -4, -8]
+
+    assert [
+        row["stock_after"]
+        for row in events
+    ] == [12, 8, 0]
+
+    assert len({
+        row["operation_key"]
+        for row in events
+    }) == 3
+
+    assert all(
+        row["quantity_change"] != 0
+        for row in events
+    )

@@ -27,13 +27,15 @@ EXPECTED = {
     "ADMIN": {
         "/", "/products", "/profile", "/admin/dashboard",
         "/admin/products", "/admin/catalog", "/admin/imports",
-        "/admin/inventory", "/admin/orders", "/admin/customers",
+        "/admin/inventory", "/admin/adjustments",
+        "/admin/orders", "/admin/customers",
         "/admin/invoices", "/admin/reports",
     },
     "SUPER_ADMIN": {
         "/", "/products", "/profile", "/admin/dashboard",
         "/admin/products", "/admin/catalog", "/admin/imports",
-        "/admin/inventory", "/admin/orders", "/admin/customers",
+        "/admin/inventory", "/admin/adjustments",
+        "/admin/orders", "/admin/customers",
         "/admin/invoices", "/admin/reports",
         "/super/accounts", "/super/settings",
     },
@@ -46,7 +48,7 @@ EXPECTED = {
     [item.route for item in MENU],
 )
 def test_route_available_matches_role_plan(role, route):
-    """Kiểm tra 19 URL x 4 vai trò."""
+    """Kiểm tra toàn bộ URL trong menu với 4 vai trò."""
 
     assert route_available(role, route) == (
         route in EXPECTED[role]

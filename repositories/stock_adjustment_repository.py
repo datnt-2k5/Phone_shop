@@ -182,6 +182,7 @@ class StockAdjustmentRepository(BaseRepository):
 
         return dict(row) if row is not None else None
 
+
     def list_items(
         self,
         adjustment_id: int,
@@ -189,14 +190,62 @@ class StockAdjustmentRepository(BaseRepository):
         rows = self.session.execute(
             text("""
                 SELECT
-                    id, adjustment_id, product_id,
-                    old_quantity, actual_quantity,
-                    quantity_change, stock_after
-                FROM stock_adjustment_items
-                WHERE adjustment_id = :adjustment_id
-                ORDER BY id ASC
+                    ai.id,
+                    ai.adjustment_id,
+                    ai.product_id,
+                    p.sku,
+                    p.name AS product_name,
+                    ai.old_quantity,
+                    ai.actual_quantity,
+                    ai.quantity_change,
+                    ai.stock_after
+                FROM stock_adjustment_items AS ai
+                JOIN products AS p
+                    ON p.id = ai.product_id
+                WHERE ai.adjustment_id = :adjustment_id
+                ORDER BY ai.id ASC
             """),
             {"adjustment_id": adjustment_id},
+        ).mappings().all()
+
+        return [dict(row) for row in rows]
+
+
+    def list_adjustments(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        rows = self.session.execute(
+            text("""
+                SELECT
+                    a.id,
+                    a.code,
+                    a.reason,
+                    a.created_by,
+                    u.full_name AS created_by_name,
+                    a.created_at,
+                    COUNT(ai.id) AS changed_items
+                FROM stock_adjustments AS a
+                JOIN users AS u
+                    ON u.id = a.created_by
+                LEFT JOIN stock_adjustment_items AS ai
+                    ON ai.adjustment_id = a.id
+                GROUP BY
+                    a.id,
+                    a.code,
+                    a.reason,
+                    a.created_by,
+                    u.full_name,
+                    a.created_at
+                ORDER BY a.id DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            {
+                "limit": limit,
+                "offset": offset,
+            },
         ).mappings().all()
 
         return [dict(row) for row in rows]
