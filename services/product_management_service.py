@@ -22,6 +22,32 @@ from utils.time_utils import Clock
 class ProductManagementService(BaseService):
     """Customer-safe search, authorized admin search and status changes."""
 
+    _PUBLIC_FIELDS = (
+        "id",
+        "sku",
+        "name",
+        "brand_id",
+        "brand_name",
+        "storage",
+        "color",
+        "description",
+        "image_url",
+        "sell_price",
+        "in_stock",
+    )
+
+    @classmethod
+    def _public_view(
+        cls,
+        row: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Only customer-safe product fields may leave this Service."""
+        return {
+            field: row[field]
+            for field in cls._PUBLIC_FIELDS
+            if field in row
+        }
+
     def __init__(
         self,
         session_factory: Callable[[], Session] = SessionLocal,
@@ -249,13 +275,48 @@ class ProductManagementService(BaseService):
             offset=offset,
         )
 
+
         with self.session_factory() as session:
-            return self.search_repository_factory(
+            result = self.search_repository_factory(
                 session
             ).search_public(
                 **params,
                 only_in_stock=only_in_stock,
             )
+
+        return {
+            "items": [
+                self._public_view(item)
+                for item in result["items"]
+            ],
+            "total": result["total"],
+            "limit": result["limit"],
+            "offset": result["offset"],
+        }
+
+    def get_public_detail(
+        self,
+        *,
+        product_id: int,
+    ) -> dict[str, Any]:
+        """Read one ACTIVE product without exposing internal stock/cost."""
+        self._positive_id(
+            product_id,
+            field="product_id",
+        )
+
+        with self.session_factory() as session:
+            product = self.product_repository_factory(
+                session
+            ).get_public_by_id(product_id)
+
+        if product is None:
+            raise AppError(
+                "NOT_FOUND",
+                "Không tìm thấy sản phẩm đang kinh doanh.",
+            )
+
+        return self._public_view(product)
 
     def search_admin(
         self,
