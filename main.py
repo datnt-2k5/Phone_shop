@@ -35,6 +35,7 @@ from ui.pages.login_page import build_login_page
 from ui.pages.product_management_page import build_product_management_page
 from ui.pages.profile_page import build_profile_page
 from ui.pages.register_page import build_register_page
+from ui.pages.stock_adjustment_page import build_stock_adjustment_page
 from ui.route_guard import check_route_access
 
 
@@ -300,6 +301,10 @@ def main(page: ft.Page) -> None:
         # Task 40 – US07: Tồn kho và lịch sử biến động.
         if route == "/admin/inventory":
             return build_inventory_page(page)
+
+        # Task 43 – US07 P2: Kiểm kê và điều chỉnh tồn.
+        if route == "/admin/adjustments":
+            return build_stock_adjustment_page(page)
 
         title = next(
             item.label

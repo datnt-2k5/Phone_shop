@@ -266,3 +266,78 @@ class StockAdjustmentService(BaseService):
             permission=Permission.IMPORT_STOCK,
             action=action,
         )
+
+
+    def list_adjustments(
+        self,
+        *,
+        session_store: AuthSessionStore,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "Giới hạn phân trang không hợp lệ.",
+            )
+
+        if type(offset) is not int or offset < 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "Vị trí phân trang không hợp lệ.",
+            )
+
+        return self.protected_actions.run_allowed(
+            session_store=session_store,
+            permission=Permission.VIEW_INVENTORY,
+            action=lambda session: (
+                self.adjustment_repository_factory(
+                    session
+                ).list_adjustments(
+                    limit=limit,
+                    offset=offset,
+                )
+            ),
+        )
+
+    def get_adjustment(
+        self,
+        *,
+        session_store: AuthSessionStore,
+        adjustment_id: int,
+    ) -> dict[str, Any]:
+        if type(adjustment_id) is not int or adjustment_id <= 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "ID phiếu kiểm kê không hợp lệ.",
+            )
+
+        def action(session: Session) -> dict[str, Any]:
+            repository = self.adjustment_repository_factory(
+                session
+            )
+
+            header = repository.get_adjustment(
+                adjustment_id
+            )
+
+            if header is None:
+                raise AppError(
+                    "NOT_FOUND",
+                    "Không tìm thấy phiếu kiểm kê.",
+                )
+
+            items = repository.list_items(
+                adjustment_id
+            )
+
+            return {
+                "adjustment": header,
+                "items": items,
+            }
+
+        return self.protected_actions.run_allowed(
+            session_store=session_store,
+            permission=Permission.VIEW_INVENTORY,
+            action=action,
+        )
