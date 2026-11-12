@@ -8,6 +8,7 @@ Task 15: Đăng nhập, đăng xuất và điều hướng theo role.
 Chạy: flet run --web main.py
 """
 
+import logging
 from decimal import Decimal, InvalidOperation
 
 import flet as ft
@@ -19,6 +20,8 @@ from services.auth_service import (
     LoginResult,
 )
 from services.auth_session import AUTH_SESSION_USER_ID_KEY
+from services.cart_session import CartSession
+from services.product_management_service import ProductManagementService
 from ui.components.money_format import format_vnd
 from ui.components.notifications import notify
 from ui.navigation import (
@@ -28,6 +31,7 @@ from ui.navigation import (
     menu_for_role,
     route_available,
 )
+from ui.pages.cart_page import build_cart_page
 from ui.pages.catalog_page import build_catalog_page
 from ui.pages.import_page import build_import_page
 from ui.pages.inventory_page import build_inventory_page
@@ -48,6 +52,7 @@ from ui.route_guard import (
     public_product_id,
 )
 
+logger = logging.getLogger(__name__)
 
 def main(page: ft.Page) -> None:
     page.title = "Phone Shop | Website quản lý điện thoại"
@@ -92,6 +97,60 @@ def main(page: ft.Page) -> None:
 
             # Không che giấu lỗi nghiệp vụ khác.
             raise
+
+
+    def require_customer() -> None:
+        """Revalidate Customer from the database before cart mutation."""
+        user = current_user()
+
+        if user is None or user.role != "CUSTOMER":
+            raise AppError(
+                "FORBIDDEN",
+                "Chỉ khách hàng đã đăng nhập "
+                "mới được sử dụng giỏ hàng.",
+            )
+
+    def add_product_to_cart(product_id: int) -> None:
+        """Add one currently available product to this user's cart."""
+        try:
+            require_customer()
+
+            product = ProductManagementService().get_public_detail(
+                product_id=product_id,
+            )
+
+            if not bool(product["in_stock"]):
+                raise AppError(
+                    "OUT_OF_STOCK",
+                    "Sản phẩm hiện đang hết hàng.",
+                )
+
+            cart = CartSession(page.session.store)
+            cart.add(product_id, 1)
+
+        except AppError as exc:
+            notify(
+                page,
+                exc.message,
+                error=True,
+            )
+            return
+
+        except Exception:
+            logger.exception("Failed to add item to cart")
+            notify(
+                page,
+                "Không thể thêm sản phẩm vào giỏ hàng.",
+                error=True,
+            )
+            return
+
+        page.navigate("/cart")
+
+        notify(
+            page,
+            "Đã thêm sản phẩm vào giỏ hàng.",
+        )
 
     def login_success(result: LoginResult) -> None:
         """Đăng nhập thành công, điều hướng đúng role."""
@@ -295,6 +354,14 @@ def main(page: ft.Page) -> None:
             return build_public_product_detail_page(
                 page,
                 product_id=detail_id,
+                on_add=(add_product_to_cart if role == "CUSTOMER" else None),
+            )
+
+        # Task 48 – US09-T01: Customer session cart.
+        if route == "/cart":
+            return build_cart_page(
+                page,
+                authorize=require_customer,
             )
 
         # Trang đăng nhập thật - Task 15
