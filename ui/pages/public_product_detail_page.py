@@ -2,6 +2,7 @@
 """Task 46 / US08-T04: read-only public product detail page."""
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import flet as ft
@@ -22,11 +23,22 @@ class PublicProductDetailPanel:
         *,
         product_id: int,
         products: ProductManagementService,
+        on_add: Callable[[int], None] | None = None,
     ) -> None:
         self.page = page
         self.product_id = product_id
         self.products = products
+        self.on_add = on_add
 
+        self.add_button = (
+            ft.Button(
+                "Thêm vào giỏ hàng",
+                on_click=self.add_to_cart,
+                disabled=True,
+            )
+            if on_add is not None
+            else None
+        )
         self.message = ft.Text(color=ft.Colors.RED_700)
         self.content = ft.Column(spacing=14)
 
@@ -46,11 +58,22 @@ class PublicProductDetailPanel:
                 self.back_button,
                 self.message,
                 self.content,
+                *([self.add_button] if self.add_button is not None else []),
             ],
         )
 
     def back_to_products(self, e=None) -> None:
         self.page.navigate("/products")
+
+    def add_to_cart(self, e=None) -> None:
+        if (
+            self.on_add is None
+            or self.add_button is None
+            or self.add_button.disabled
+        ):
+            return
+
+        self.on_add(self.product_id)
 
     @staticmethod
     def product_view(
@@ -168,6 +191,8 @@ class PublicProductDetailPanel:
         """Fetch detail before attaching the control to its View."""
         self.message.value = ""
         self.content.controls = []
+        if self.add_button is not None:
+            self.add_button.disabled = True
 
         try:
             product = self.products.get_public_detail(
@@ -177,6 +202,11 @@ class PublicProductDetailPanel:
             self.content.controls = [
                 self.product_view(product)
             ]
+
+            if self.add_button is not None:
+                self.add_button.disabled = not bool(
+                    product["in_stock"]
+                )
 
         except AppError as exc:
             if exc.error_code == "NOT_FOUND":
@@ -213,11 +243,13 @@ def build_public_product_detail_page(
     page: ft.Page,
     *,
     product_id: int,
+    on_add: Callable[[int], None] | None = None,
 ) -> ft.Column:
     panel = PublicProductDetailPanel(
         page,
         product_id=product_id,
         products=ProductManagementService(),
+        on_add=on_add,
     )
 
     panel.load(redraw=False)
