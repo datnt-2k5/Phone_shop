@@ -221,7 +221,7 @@ def test_create_pending_persists_price_and_name_snapshots(ws):
 
     order_id = result.order["id"]
 
-    assert result.order["code"] == f"ORD-{order_id:010d}"
+    assert result.order["code"] == f"DH{order_id:08d}"
     assert count_orders(ws, ws["customer_a"]) == 1
 
     order, items = load_order(ws, order_id)
@@ -397,9 +397,18 @@ def test_new_order_uses_latest_database_price(ws):
 
 def test_second_item_insert_failure_rolls_back_order(ws):
     class FailingOrderRepository(OrderRepository):
+        def __init__(self, session):
+            super().__init__(session)
+            self.item_count = 0
+
         def create_item(self, **kwargs):
-            super().create_item(**kwargs)
-            raise RuntimeError("forced item failure")
+            self.item_count += 1
+            result = super().create_item(**kwargs)
+
+            if self.item_count == 2:
+                raise RuntimeError("forced item failure")
+
+            return result
 
     service = CheckoutOrderService(
         session_factory=ws["factory"],

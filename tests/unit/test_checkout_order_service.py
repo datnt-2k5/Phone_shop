@@ -248,7 +248,7 @@ def test_new_checkout_creates_pending_with_current_prices():
 
     assert result.outcome == "CREATED"
     assert result.order["id"] == 42
-    assert result.order["code"] == "ORD-0000000042"
+    assert result.order["code"] == "DH00000042"
     assert result.order["status"] == "PENDING"
     assert result.order["total_amount"] == Decimal(
         "32000001.00"
@@ -307,7 +307,7 @@ def test_temporary_and_official_codes_are_distinct():
 
     assert temporary.startswith("TMP-")
     assert len(temporary) <= 50
-    assert official == "ORD-0000000042"
+    assert official == "DH00000042"
     assert temporary != official
 
 
