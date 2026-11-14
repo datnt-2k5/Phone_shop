@@ -277,7 +277,7 @@ class CheckoutOrderService(BaseService):
             # Order ID is already unique in MariaDB.
             # Thus the final code is deterministic and independent
             # of random number generators or local date formatting.
-            official_code = f"ORD-{order_id:010d}"
+            official_code = f"DH{order_id:08d}"
 
             if not orders.update_code(
                 order_id=order_id,
