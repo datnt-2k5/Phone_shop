@@ -22,7 +22,7 @@ EXPECTED = {
     },
     "CUSTOMER": {
         "/", "/products", "/profile", "/cart",
-        "/my-orders", "/my-invoices",
+        "/checkout","/my-orders", "/my-invoices",
     },
     "ADMIN": {
         "/", "/products", "/profile", "/admin/dashboard",

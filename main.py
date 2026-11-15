@@ -22,6 +22,7 @@ from services.auth_service import (
 from services.auth_session import AUTH_SESSION_USER_ID_KEY
 from services.cart_session import CartSession
 from services.product_management_service import ProductManagementService
+from ui.checkout_key_state import CheckoutKeyState
 from ui.components.money_format import format_vnd
 from ui.components.notifications import notify
 from ui.navigation import (
@@ -33,6 +34,10 @@ from ui.navigation import (
 )
 from ui.pages.cart_page import build_cart_page
 from ui.pages.catalog_page import build_catalog_page
+from ui.pages.checkout_page import (
+    build_checkout_page,
+    build_order_receipt_page,
+)
 from ui.pages.import_page import build_import_page
 from ui.pages.inventory_page import build_inventory_page
 from ui.pages.login_page import build_login_page
@@ -49,6 +54,7 @@ from ui.pages.register_page import build_register_page
 from ui.pages.stock_adjustment_page import build_stock_adjustment_page
 from ui.route_guard import (
     check_route_access,
+    customer_order_id,
     public_product_id,
 )
 
@@ -168,6 +174,7 @@ def main(page: ft.Page) -> None:
     def logout(e=None) -> None:
         """Đăng xuất và xóa dữ liệu phiên hiện tại."""
 
+        CheckoutKeyState(page.session.store).clear()
         auth_service.logout(
             session_store=page.session.store
         )
@@ -308,12 +315,14 @@ def main(page: ft.Page) -> None:
         """Tạo nội dung trang sau khi kiểm tra route."""
 
         detail_id = public_product_id(route)
+        order_id = customer_order_id(route)
 
-        permission_route = (
-            "/products"
-            if detail_id is not None
-            else route
-        )
+        if detail_id is not None:
+            permission_route = "/products"
+        elif order_id is not None:
+            permission_route = "/my-orders"
+        else:
+            permission_route = route
 
         if permission_route not in known_routes:
             return ft.Column(
@@ -361,6 +370,20 @@ def main(page: ft.Page) -> None:
         if route == "/cart":
             return build_cart_page(
                 page,
+                authorize=require_customer,
+            )
+
+        if route == "/checkout":
+            return build_checkout_page(
+                page,
+                authorize=require_customer,
+            )
+
+        if order_id is not None and user is not None:
+            return build_order_receipt_page(
+                page,
+                order_id=order_id,
+                customer_id=user.user_id,
                 authorize=require_customer,
             )
 

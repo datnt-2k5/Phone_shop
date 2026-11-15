@@ -58,6 +58,31 @@ def public_product_id(route: str) -> int | None:
     return product_id
 
 
+def customer_order_id(route: str) -> int | None:
+    """Parse /my-orders/{positive BIGINT} safely."""
+    prefix = "/my-orders/"
+
+    if not isinstance(route, str) or not route.startswith(prefix):
+        return None
+
+    raw_id = route[len(prefix):]
+
+    if (
+        not raw_id
+        or len(raw_id) > 19
+        or not raw_id.isascii()
+        or not raw_id.isdecimal()
+        or raw_id.startswith("0")
+    ):
+        return None
+
+    order_id = int(raw_id)
+
+    if order_id > 9_223_372_036_854_775_807:
+        return None
+
+    return order_id
+
 def check_route_access(
     *,
     route: str,
@@ -73,12 +98,14 @@ def check_route_access(
     # Task 46: map valid product-detail routes to public
     # product permission without adding dynamic IDs to MENU.
     detail_id = public_product_id(route)
+    order_id = customer_order_id(route)
 
-    permission_route = (
-        "/products"
-        if detail_id is not None
-        else route
-    )
+    if detail_id is not None:
+        permission_route = "/products"
+    elif order_id is not None:
+        permission_route = "/my-orders"
+    else:
+        permission_route = route
 
     if permission_route not in KNOWN_ROUTES:
         return RouteDecision(RouteStatus.NOT_FOUND)

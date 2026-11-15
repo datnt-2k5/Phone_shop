@@ -42,6 +42,12 @@ class CartPanel:
         self.note = ft.Text()
         self.rows = ft.Column(spacing=12)
 
+        self.checkout_button = ft.Button(
+            "Tiến hành đặt hàng",
+            on_click=self.go_checkout,
+            disabled=True,
+        )
+
         self.root = ft.Column(
             spacing=16,
             controls=[
@@ -64,6 +70,7 @@ class CartPanel:
                     wrap=True,
                     spacing=10,
                     controls=[
+                        self.checkout_button,
                         ft.Button(
                             "Tiếp tục mua sắm",
                             on_click=self.continue_shopping,
@@ -79,6 +86,24 @@ class CartPanel:
 
     def continue_shopping(self, e=None) -> None:
         self.page.navigate("/products")
+
+    def go_checkout(self, e=None) -> None:
+        """Reauthorize and open checkout for a nonempty cart."""
+        try:
+            self.authorize()
+
+            if not self.cart.items():
+                raise AppError(
+                    "VALIDATION_ERROR",
+                    "Giỏ hàng đang trống.",
+                )
+
+        except AppError as exc:
+            self.error.value = exc.message
+            self.page.update()
+            return
+
+        self.page.navigate("/checkout")
 
     def _product_card(
         self,
@@ -206,6 +231,7 @@ class CartPanel:
 
         try:
             cart_rows = self.cart.items()
+            self.checkout_button.disabled = not bool(cart_rows)
             unavailable = 0
 
             for row in cart_rows:
@@ -260,6 +286,7 @@ class CartPanel:
                 )
 
         except AppError as exc:
+            self.checkout_button.disabled = True
             if exc.error_code == "CART_INVALID":
                 self.error.value = exc.message
             else:
@@ -279,6 +306,7 @@ class CartPanel:
             )
 
         except Exception:
+            self.checkout_button.disabled = True
             logger.exception("Cart load failed")
             self.error.value = (
                 "Không thể tải giỏ hàng. "

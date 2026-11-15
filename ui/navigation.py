@@ -20,6 +20,7 @@ MENU: tuple[MenuItem, ...] = (
     MenuItem("Đăng ký", "/register"),
     MenuItem("Hồ sơ", "/profile"),
     MenuItem("Giỏ hàng", "/cart"),
+    MenuItem("Thanh toán", "/checkout"),
     MenuItem("Đơn của tôi", "/my-orders"),
     MenuItem("Hóa đơn của tôi", "/my-invoices"),
     MenuItem("Dashboard", "/admin/dashboard"),
@@ -43,6 +44,7 @@ GUEST = PUBLIC + ("/login", "/register")
 CUSTOMER = PUBLIC + (
     "/profile",
     "/cart",
+    "/checkout",
     "/my-orders",
     "/my-invoices",
 )
@@ -87,6 +89,7 @@ ROUTE_PERMISSIONS = MappingProxyType({
     "/register": Permission.REGISTER,
     "/profile": Permission.VIEW_PROFILE,
     "/cart": Permission.PLACE_ORDER,
+    "/checkout": Permission.PLACE_ORDER,
     "/my-orders": Permission.VIEW_ORDERS,
     "/my-invoices": Permission.VIEW_INVOICES,
     "/admin/dashboard": Permission.VIEW_STATISTICS,
