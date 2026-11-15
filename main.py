@@ -34,9 +34,10 @@ from ui.navigation import (
 )
 from ui.pages.cart_page import build_cart_page
 from ui.pages.catalog_page import build_catalog_page
-from ui.pages.checkout_page import (
-    build_checkout_page,
-    build_order_receipt_page,
+from ui.pages.checkout_page import build_checkout_page
+from ui.pages.customer_orders_page import (
+    build_customer_order_detail_page,
+    build_customer_orders_page,
 )
 from ui.pages.import_page import build_import_page
 from ui.pages.inventory_page import build_inventory_page
@@ -379,12 +380,17 @@ def main(page: ft.Page) -> None:
                 authorize=require_customer,
             )
 
-        if order_id is not None and user is not None:
-            return build_order_receipt_page(
+        if route == "/my-orders":
+            return build_customer_orders_page(
+                page,
+                session_store=page.session.store,
+            )
+
+        if order_id is not None:
+            return build_customer_order_detail_page(
                 page,
                 order_id=order_id,
-                customer_id=user.user_id,
-                authorize=require_customer,
+                session_store=page.session.store,
             )
 
         # Trang đăng nhập thật - Task 15
