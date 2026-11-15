@@ -20,7 +20,7 @@ from services.auth_service import (
     LoginResult,
 )
 from services.auth_session import AUTH_SESSION_USER_ID_KEY
-from services.cart_session import CartSession
+from services.persistent_cart import PersistentCart
 from services.product_management_service import ProductManagementService
 from ui.checkout_key_state import CheckoutKeyState
 from ui.components.money_format import format_vnd
@@ -132,7 +132,7 @@ def main(page: ft.Page) -> None:
                     "Sản phẩm hiện đang hết hàng.",
                 )
 
-            cart = CartSession(page.session.store)
+            cart = PersistentCart(page.session.store)
             cart.add(product_id, 1)
 
         except AppError as exc:
@@ -372,12 +372,14 @@ def main(page: ft.Page) -> None:
             return build_cart_page(
                 page,
                 authorize=require_customer,
+                cart=PersistentCart(page.session.store),
             )
 
         if route == "/checkout":
             return build_checkout_page(
                 page,
                 authorize=require_customer,
+                cart=PersistentCart(page.session.store),
             )
 
         if route == "/my-orders":

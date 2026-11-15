@@ -6,11 +6,12 @@ Task 52 according to PM_Tool_Quan_Ly_Dien_Thoai_v2.5.xlsx.
 
 from uuid import UUID, uuid4
 
-from services.auth_session import CHECKOUT_SESSION_KEY
+from services.auth_session import CHECKOUT_HASH_SESSION_KEY, CHECKOUT_SESSION_KEY
 from services.checkout_request_hash import create_request_hash
+from services.session_store_utils import discard_session_key
 
 CHECKOUT_KEY = CHECKOUT_SESSION_KEY
-CHECKOUT_HASH = "checkout_business_request_hash"
+CHECKOUT_HASH = CHECKOUT_HASH_SESSION_KEY
 
 class CheckoutKeyState:
     def __init__(self, session_store):
@@ -71,7 +72,13 @@ class CheckoutKeyState:
 
         return request
 
-    def clear(self):
-        """Clear after successful checkout or logout."""
-        self.session_store.remove(CHECKOUT_KEY)
-        self.session_store.remove(CHECKOUT_HASH)
+    def clear(self) -> None:
+        """Clear checkout state safely and idempotently."""
+        discard_session_key(
+            self.session_store,
+            CHECKOUT_KEY,
+        )
+        discard_session_key(
+            self.session_store,
+            CHECKOUT_HASH,
+        )

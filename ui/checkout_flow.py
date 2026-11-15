@@ -10,6 +10,7 @@ from services.checkout_order_service import (
     CheckoutOrderResult,
     CheckoutOrderService,
 )
+from services.persistent_cart import PersistentCart
 from ui.checkout_key_state import CheckoutKeyState
 
 
@@ -17,7 +18,7 @@ class CheckoutFlow:
     def __init__(
         self,
         *,
-        cart: CartSession,
+        cart: CartSession | PersistentCart,
         keys: CheckoutKeyState,
         authorize: Callable[[], None],
         service: CheckoutOrderService | None = None,

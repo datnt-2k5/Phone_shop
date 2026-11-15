@@ -28,6 +28,7 @@ SESSION_KEYS_TO_CLEAR = (
     USER_CACHE_SESSION_KEY,
 )
 
+CHECKOUT_HASH_SESSION_KEY = "checkout_business_request_hash"
 
 class AuthSessionStore(Protocol):
     """Giao diện cần thiết của Flet server-side Session Store."""
