@@ -1,15 +1,5 @@
-"""Task 54 / US09-T07: create a PENDING checkout order.
 
-The operation:
-- Runs Task 53 idempotency check before product reads.
-- Returns an existing order for a valid retry.
-- For NEW, reads current ACTIVE products and prices.
-- Saves an order and its item snapshots in one transaction.
-- Generates a unique order code based on the database ID.
-- Does not reserve, deduct or modify stock.
-
-Concurrent UNIQUE-insert recovery belongs to US09-T08.
-"""
+"""Create a PENDING order with safe MariaDB UNIQUE race recovery."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,6 +7,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.connection import SessionLocal
@@ -27,6 +18,7 @@ from services.auth_session import AuthSessionStore
 from services.base_service import BaseService
 from services.checkout_idempotency_service import (
     CheckoutIdempotencyService,
+    IdempotencyCheckResult,
 )
 from utils.money_utils import quantize_money
 from utils.time_utils import Clock
@@ -36,7 +28,7 @@ MAX_ORDER_TOTAL = Decimal("9999999999999999.99")
 
 @dataclass(frozen=True, slots=True)
 class CheckoutOrderResult:
-    """Customer-safe result; no stock or cost information."""
+    """Customer-safe order result."""
 
     outcome: Literal["CREATED", "REPLAY"]
     order: dict[str, Any]
@@ -44,7 +36,6 @@ class CheckoutOrderResult:
 
 
 def _safe_order_summary(row: dict[str, Any]) -> dict[str, Any]:
-    """Never expose internal order columns to the Customer."""
     return {
         "id": row["id"],
         "code": row["code"],
@@ -57,7 +48,6 @@ def _resolve_existing(
     row: dict[str, Any],
     request_hash: str,
 ) -> CheckoutOrderResult:
-    """Make an idempotency decision without reading product data."""
     if row["request_hash"] != request_hash:
         raise AppError(
             "IDEMPOTENCY_CONFLICT",
@@ -78,7 +68,7 @@ def _resolve_existing(
 
 
 class CheckoutOrderService(BaseService):
-    """Create or replay a PENDING checkout order."""
+    """Create once, replay matching retries, recover UNIQUE races."""
 
     def __init__(
         self,
@@ -94,9 +84,7 @@ class CheckoutOrderService(BaseService):
         ] = ProductRepository,
     ) -> None:
         super().__init__(clock=clock)
-
         self.session_factory = session_factory
-
         self.idempotency_service = (
             idempotency_service
             if idempotency_service is not None
@@ -104,7 +92,6 @@ class CheckoutOrderService(BaseService):
                 session_factory=session_factory,
             )
         )
-
         self.order_repository_factory = order_repository_factory
         self.product_repository_factory = product_repository_factory
 
@@ -113,12 +100,6 @@ class CheckoutOrderService(BaseService):
         product_repository: ProductRepository,
         items: list[dict[str, int]],
     ) -> tuple[list[dict[str, Any]], Decimal]:
-        """Read current product data and calculate the order total.
-
-        Product rows are read in ascending ID order with FOR UPDATE
-        so price/status snapshots remain stable while this transaction
-        inserts the order. This does NOT reserve inventory.
-        """
         snapshots: list[dict[str, Any]] = []
         total = Decimal(0)
 
@@ -134,31 +115,22 @@ class CheckoutOrderService(BaseService):
                 for_update=True,
             )
 
-            if (
-                product is None
-                or product["status"] != "ACTIVE"
-            ):
+            if product is None or product["status"] != "ACTIVE":
                 raise AppError(
                     "PRODUCT_UNAVAILABLE",
                     "Có sản phẩm không còn khả dụng để đặt hàng.",
                     {
                         "items": (
-                            "Vui lòng cập nhật giỏ hàng "
-                            "và thử lại."
+                            "Vui lòng cập nhật giỏ hàng và thử lại."
                         )
                     },
                 )
 
             unit_price = product["sell_price"]
 
-            if type(unit_price) is not Decimal:
-                raise AppError(
-                    "PRICE_INVALID",
-                    "Giá bán sản phẩm không hợp lệ.",
-                )
-
             if (
-                not unit_price.is_finite()
+                type(unit_price) is not Decimal
+                or not unit_price.is_finite()
                 or unit_price <= 0
                 or unit_price != quantize_money(unit_price)
             ):
@@ -167,11 +139,7 @@ class CheckoutOrderService(BaseService):
                     "Giá bán sản phẩm không hợp lệ.",
                 )
 
-            line_total = quantize_money(
-                unit_price * quantity
-            )
-
-            total += line_total
+            total += quantize_money(unit_price * quantity)
 
             if total > MAX_ORDER_TOTAL:
                 raise AppError(
@@ -191,46 +159,16 @@ class CheckoutOrderService(BaseService):
 
         return snapshots, quantize_money(total)
 
-    def create(
+    def _create_pending_new(
         self,
-        *,
-        session_store: AuthSessionStore,
-        checkout_request: object,
+        decision: IdempotencyCheckResult,
     ) -> CheckoutOrderResult:
-        """Create PENDING once, or return the old matching order.
-
-        Auth, input validation, canonical hashing and first
-        idempotency lookup are delegated to Task 53.
-        """
-        decision = self.idempotency_service.check(
-            session_store=session_store,
-            checkout_request=checkout_request,
-        )
-
-        if decision.outcome == "REPLAY":
-            if decision.existing_order is None:
-                raise RuntimeError(
-                    "REPLAY không có dữ liệu đơn hàng."
-                )
-
-            return CheckoutOrderResult(
-                outcome="REPLAY",
-                order=dict(decision.existing_order),
-                message="Đơn hàng đã được tiếp nhận trước đó.",
-            )
-
+        """Write an order in one transaction; failures roll back."""
         normalized = decision.normalized_request
 
-        with (
-            self.session_factory() as session,
-            session.begin(),
-        ):
+        with self.session_factory() as session, session.begin():
             orders = self.order_repository_factory(session)
 
-            # Recheck in the write transaction.
-            # This handles ordinary sequential retries that
-            # arrive between the initial read and this transaction.
-            # Simultaneous UNIQUE conflicts are handled in Task 55.
             previous = orders.find_by_idempotency_key(
                 customer_id=decision.customer_id,
                 idempotency_key=decision.idempotency_key,
@@ -249,14 +187,8 @@ class CheckoutOrderService(BaseService):
                 normalized["items"],
             )
 
-            now_utc = self.current_time()
-
-            # Temporary code is unique with overwhelming probability.
-            # The stable final code is assigned after obtaining order ID.
-            temporary_code = f"TMP-{uuid4().hex}"
-
             order_id = orders.create_pending(
-                temporary_code=temporary_code,
+                temporary_code=f"TMP-{uuid4().hex}",
                 customer_id=decision.customer_id,
                 idempotency_key=decision.idempotency_key,
                 request_hash=decision.request_hash,
@@ -265,7 +197,7 @@ class CheckoutOrderService(BaseService):
                 receiver_address=normalized["receiver_address"],
                 note=normalized["note"],
                 total_amount=total_amount,
-                now_utc=now_utc,
+                now_utc=self.current_time(),
             )
 
             for snapshot in snapshots:
@@ -274,9 +206,6 @@ class CheckoutOrderService(BaseService):
                     **snapshot,
                 )
 
-            # Order ID is already unique in MariaDB.
-            # Thus the final code is deterministic and independent
-            # of random number generators or local date formatting.
             official_code = f"DH{order_id:08d}"
 
             if not orders.update_code(
@@ -304,5 +233,76 @@ class CheckoutOrderService(BaseService):
                 ),
             )
 
-        # Reached only after the transaction context committed.
         return result
+
+    def _recover_unique_violation(
+        self,
+        decision: IdempotencyCheckResult,
+        exc: IntegrityError,
+    ) -> CheckoutOrderResult:
+        """Recover a MariaDB duplicate-key race using a fresh Session.
+
+        The original failed transaction must already be rolled back.
+        Only MariaDB error 1062 is eligible for idempotency recovery.
+        """
+        mysql_args = getattr(exc.orig, "args", ())
+        mysql_code = mysql_args[0] if mysql_args else None
+
+        if mysql_code != 1062:
+            raise exc
+
+        # Fresh Session => fresh database snapshot.
+        with self.session_factory() as session:
+            orders = self.order_repository_factory(session)
+
+            previous = orders.find_by_idempotency_key(
+                customer_id=decision.customer_id,
+                idempotency_key=decision.idempotency_key,
+            )
+
+        if previous is None:
+            # The UNIQUE error could involve another column,
+            # for example the order code. Never invent a REPLAY.
+            raise AppError(
+                "CHECKOUT_RETRY_REQUIRED",
+                "Chưa thể xác định kết quả đặt hàng. "
+                "Vui lòng thử lại cùng nội dung và checkout key.",
+            ) from exc
+
+        return _resolve_existing(
+            previous,
+            decision.request_hash,
+        )
+
+    def create(
+        self,
+        *,
+        session_store: AuthSessionStore,
+        checkout_request: object,
+    ) -> CheckoutOrderResult:
+        """Authenticate, apply idempotency, then create or replay."""
+        decision = self.idempotency_service.check(
+            session_store=session_store,
+            checkout_request=checkout_request,
+        )
+
+        if decision.outcome == "REPLAY":
+            if decision.existing_order is None:
+                raise RuntimeError(
+                    "REPLAY không có dữ liệu đơn hàng."
+                )
+
+            return CheckoutOrderResult(
+                outcome="REPLAY",
+                order=dict(decision.existing_order),
+                message="Đơn hàng đã được tiếp nhận trước đó.",
+            )
+
+        try:
+            return self._create_pending_new(decision)
+
+        except IntegrityError as exc:
+            return self._recover_unique_violation(
+                decision,
+                exc,
+            )
