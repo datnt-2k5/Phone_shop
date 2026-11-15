@@ -13,6 +13,7 @@ from models.app_error import AppError
 from repositories.order_repository import OrderRepository
 from services.cart_session import CartSession
 from services.checkout_order_service import CheckoutOrderService
+from services.persistent_cart import PersistentCart
 from services.product_management_service import ProductManagementService
 from ui.checkout_flow import CheckoutFlow
 from ui.checkout_key_state import CheckoutKeyState
@@ -30,7 +31,7 @@ class CheckoutPanel:
         page: ft.Page,
         *,
         authorize: Callable[[], None],
-        cart: CartSession | None = None,
+        cart: CartSession | PersistentCart | None = None,
         products: ProductManagementService | None = None,
         service: CheckoutOrderService | None = None,
     ) -> None:
@@ -358,14 +359,17 @@ class CheckoutPanel:
             self.page.update()
 
 
+
 def build_checkout_page(
     page: ft.Page,
     *,
     authorize: Callable[[], None],
+    cart: CartSession | PersistentCart | None = None,
 ) -> ft.Column:
     panel = CheckoutPanel(
         page,
         authorize=authorize,
+        cart=cart,
     )
     panel.load()
     return panel.root

@@ -9,6 +9,7 @@ import flet as ft
 
 from models.app_error import AppError
 from services.cart_session import CartSession
+from services.persistent_cart import PersistentCart
 from services.product_management_service import ProductManagementService
 from ui.components.money_format import format_vnd
 
@@ -22,7 +23,7 @@ class CartPanel:
         self,
         page: ft.Page,
         *,
-        cart: CartSession,
+        cart: CartSession | PersistentCart,
         products: ProductManagementService,
         authorize: Callable[[], None],
     ) -> None:
@@ -391,14 +392,22 @@ class CartPanel:
         self.load(redraw=True)
 
 
+
 def build_cart_page(
     page: ft.Page,
     *,
     authorize: Callable[[], None],
+    cart: CartSession | PersistentCart | None = None,
 ) -> ft.Column:
+    actual_cart = (
+        cart
+        if cart is not None
+        else CartSession(page.session.store)
+    )
+
     panel = CartPanel(
         page,
-        cart=CartSession(page.session.store),
+        cart=actual_cart,
         products=ProductManagementService(),
         authorize=authorize,
     )

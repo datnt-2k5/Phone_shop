@@ -443,6 +443,7 @@ def test_missing_detail_cannot_add():
     assert selected == []
 
 
+
 def test_main_connects_cart_route_and_customer_guard():
     source = Path("main.py").read_text(encoding="utf-8")
 
@@ -450,4 +451,8 @@ def test_main_connects_cart_route_and_customer_guard():
     assert "build_cart_page(" in source
     assert "authorize=require_customer" in source
     assert "add_product_to_cart" in source
-    assert "CartSession(page.session.store)" in source
+
+    # Task 55: Main application uses persistent database cart.
+    assert "from services.persistent_cart import PersistentCart" in source
+    assert "cart = PersistentCart(page.session.store)" in source
+    assert "cart=PersistentCart(page.session.store)" in source
